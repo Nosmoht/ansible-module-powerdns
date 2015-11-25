@@ -91,8 +91,7 @@ class PowerDNSClient:
             return None
         return self._handle_request(req)
 
-    def create_zone(self, name, kind, nameservers, masters):
-        data = dict(name=name, kind=kind, nameservers=nameservers, masters=masters)
+    def create_zone(self, data):
         req = requests.post(url=self._get_zones_url(), data=json.dumps(data), headers=self.headers)
         return self._handle_request(req)
 
@@ -115,14 +114,19 @@ def ensure(module, pdns_client):
     if not zone:
         if state == 'present':
             try:
-                pdns_client.create_zone(name=name, kind=kind, nameservers=nameservers, masters=masters)
+                zone = dict(name=name, kind=kind, nameservers=nameservers, masters=masters)
+                if module.check_mode:
+                    module.exit_json(changed=True, zone=zone)
+                pdns_client.create_zone(zone)
                 return True, pdns_client.get_zone(name)
             except PowerDNSError as e:
                 module.fail_json(msg='Could not create zone {name}: {err}'.format(name=name, err=e.message))
     else:
         if state == 'absent':
             try:
-                pdns_client.delete_zone(name) #zone.get('id'))
+                if module.check_mode:
+                    module.exit_json(changed=True, zone=zone)
+                pdns_client.delete_zone(name)  # zone.get('id'))
                 return True, None
             except PowerDNSError as e:
                 module.fail_json(
