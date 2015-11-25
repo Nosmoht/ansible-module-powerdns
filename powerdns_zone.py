@@ -9,21 +9,28 @@ description:
 - Create, update or delete a zone in PowerDNS via API
 options:
   name:
-    description: Zone name
+    description:
+    - Zone name
     required: true
   pdns_host:
-    description: Host running PowerDNS
+    description:
+    - Name or ip address of PowerDNS host
     required: false
     default: 127.0.0.1
   pdns_port:
-    description: Port used by PowerDNS API
+    description:
+    - Port used by PowerDNS API
     required: false
     default: 8081
   pdns_prot:
-    description: Protocol used to connect to PowerDNS API
+    description:
+    - Protocol used to connect to PowerDNS API
     required: false
     default: http
     choices: ['http', 'https']
+  pdns_api_key:
+    description:
+    - API Key to authenticate through PowerDNS API
 notes:
 author: "Thomas Krahn (@nosmoht)"
 '''
@@ -31,10 +38,15 @@ author: "Thomas Krahn (@nosmoht)"
 EXAMPLES = '''
 - powerdns_zone:
     name: zone01.internal.example.com
+    kind: master
+    nameservers:
+    - ns-01.internal.example.com
+    - ns-02.internal.example.com
     state: present
     pdns_host: powerdns.example.cm
     pdns_port: 8080
     pdns_prot: http
+    pdns_api_key: topsecret
 '''
 
 import requests
