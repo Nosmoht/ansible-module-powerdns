@@ -63,7 +63,6 @@ EXAMPLES = '''
 '''
 
 import requests
-import json
 
 
 class PowerDNSError(Exception):
@@ -118,11 +117,12 @@ class PowerDNSClient:
 
     def create_record(self, server, zone, name, rtype, content):
         url = self._get_zone_url(server=server, name=zone)
-        record = dict(content=content, name=name, type=rtype)
+        record_content = list()
+        record_content.append(dict(content=content, disabled='false', name=name, ttl=86400, type=rtype))
+        record = dict(name=name, type=rtype, changetype='REPLACE', records=record_content)
         rrsets = list()
         rrsets.append(record)
         data = dict(rrsets=rrsets)
-        module.fail_json(msg=json.dumps(data))
         req = requests.patch(url=url, data=json.dumps(data), headers=self.headers)
         return self._handle_request(req)
 
@@ -132,6 +132,8 @@ def ensure(module, pdns_client):
     rtype = module.params['type']
     zone = module.params['zone']
     name = module.params['name']
+    if not zone in name:
+        name = '{name}.{zone}'.format(name=name, zone=zone)
     server = module.params['server']
     state = module.params['state']
 
