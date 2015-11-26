@@ -60,7 +60,6 @@ EXAMPLES = '''
 '''
 
 import requests
-import json
 
 
 class PowerDNSError(Exception):
@@ -152,7 +151,7 @@ def ensure(module, pdns_client):
                 zone = dict(name=name, kind=kind, nameservers=nameservers, masters=masters)
                 if module.check_mode:
                     module.exit_json(changed=True, zone=zone)
-                pdns_client.create_zone(zone)
+                pdns_client.create_zone(server, zone)
                 return True, pdns_client.get_zone(server, name)
             except PowerDNSError as e:
                 module.fail_json(
