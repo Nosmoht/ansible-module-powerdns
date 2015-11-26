@@ -3,26 +3,30 @@
 
 DOCUMENTATION = '''
 ---
-module: powerdns_zone
-short_description: Manage PowerDNS zones
+module: powerdns_record
+short_description: Manage PowerDNS records
 description:
-- Create, update or delete a PowerDNS zone using API
+- Create, update or delete a PowerDNS records using API
 options:
-  kind:
-    description:
-    - Zone kind
-    required: False
-    default: master
-    choices: ['native', 'master', 'slave']
   name:
     description:
-    - Zone name
+    - Record name
     required: true
-  nameservers:
+  server:
     description:
-    - List of nameservers
-    required: False
+    - Server name
+    required: false
+    default: localhost
+  type:
+    description:
+    - Record type
+    required: false
+    choices: ['A', 'AAAA', 'PTR']
     default: None
+  zone:
+    description:
+    - Name of zone where to ensure the record
+    required: true
   pdns_host:
     description:
     - Name or ip address of PowerDNS host
@@ -46,13 +50,12 @@ author: "Thomas Krahn (@nosmoht)"
 '''
 
 EXAMPLES = '''
-- powerdns_zone:
-    name: zone01.internal.example.com
-    kind: master
-    nameservers:
-    - ns-01.internal.example.com
-    - ns-02.internal.example.com
+- powerdns_record:
+    name: host01.internal.example.com
+    type: A
+    content: 192.168.1.234
     state: present
+    zone: internal.example.com
     pdns_host: powerdns.example.cm
     pdns_port: 8080
     pdns_prot: http
@@ -113,86 +116,56 @@ class PowerDNSClient:
             return None
         return self._handle_request(req)
 
-    def create_zone(self, server, data):
-        req = requests.post(url=self._get_zones_url(server, ), data=json.dumps(data), headers=self.headers)
+    def create_record(self, server, zone, name, rtype, content):
+        url = self._get_zone_url(server=server, name=zone)
+        record = dict(content=content, name=name, type=rtype)
+        rrsets = list()
+        rrsets.append(record)
+        data = dict(rrsets=rrsets)
+        module.fail_json(msg=json.dumps(data))
+        req = requests.patch(url=url, data=json.dumps(data), headers=self.headers)
         return self._handle_request(req)
-
-    def delete_zone(self, server, name):
-        req = requests.delete(url=self._get_zone_url(server, name), headers=self.headers)
-        return self._handle_request(req)
-
-    def update_zone(self, server, zone):
-        req = requests.patch(url=self._get_zone_url(server=server, name=zone.get('name')), data=zone,
-                             headers=self.headers)
-        return self._handle_request(req)
-
-
-def diff(list1, list2):
-    c = set(list1).union(set(list2))
-    d = set(list1).intersection(set(list2))
-    return list(c - d)
 
 
 def ensure(module, pdns_client):
-    kind = module.params['kind']
-    masters = module.params['masters']
+    content = module.params['content']
+    rtype = module.params['type']
+    zone = module.params['zone']
     name = module.params['name']
-    nameservers = module.params['nameservers']
     server = module.params['server']
     state = module.params['state']
+
     try:
-        zone = pdns_client.get_zone(server, name)
+        zone = pdns_client.get_zone(server, zone)
     except PowerDNSError as e:
         module.fail_json(
-            msg='Could not get zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code, err=e.message))
+            msg='Could not get zone {name}: HTTP {code}: {err}'.format(name=zone, code=e.status_code, err=e.message))
 
     if not zone:
-        if state == 'present':
-            try:
-                zone = dict(name=name, kind=kind, nameservers=nameservers, masters=masters)
-                if module.check_mode:
-                    module.exit_json(changed=True, zone=zone)
-                pdns_client.create_zone(zone)
-                return True, pdns_client.get_zone(server, name)
-            except PowerDNSError as e:
-                module.fail_json(
-                    msg='Could not create zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
-                                                                                  err=e.message))
-    else:
-        if state == 'absent':
-            try:
-                if module.check_mode:
-                    module.exit_json(changed=True, zone=zone)
-                pdns_client.delete_zone(server, name)  # zone.get('id'))
-                return True, None
-            except PowerDNSError as e:
-                module.fail_json(
-                    msg='Could not delete zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
-                                                                                  err=e.message))
-        # Compare nameservers
-#        ns_diff = diff(nameservers if nameservers else list(), zone.get('nameservers', list()))
-#        if ns_diff:
-#            try:
-#                if module.check_mode:
-#                    module.exit_json(changed=True, zone=zone)
-#                pdns_client.update_zone(server, zone)
-#                return True, pdns_client.get_zone(name)
-#            except PowerDNSError as e:
-#                module.fail_json(
-#                    msg='Could not update zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
-#                                                                                  err=e.message))
+        module.fail_json(msg='Zone not found: {name}'.format(zone=zone))
+
+    records = zone.get('records')
+    record = next((item for item in records if item['content'] == content), None)
+    if not record and state == 'present':
+        try:
+            pdns_client.create_record(server=server, zone=zone, name=name, rtype=rtype, content=content)
+        except PowerDNSError as e:
+            module.fail_json(
+                msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
+                                                                                err=e.message))
     return False, zone
 
 
 def main():
+    global module
     module = AnsibleModule(
         argument_spec=dict(
-            kind=dict(type='str', required=False, default='master', choices=['native', 'master', 'slave']),
-            masters=dict(type='list', required=False),
+            content=dict(type='str', required=False),
             name=dict(type='str', required=True),
-            nameservers=dict(type='list', required=False),
-            server=dict(type='str', required=False, default='localhost'),
+            server=dict(type='str', default='localhost'),
             state=dict(type='str', default='present', choices=['present', 'absent']),
+            type=dict(type='str', required=False, choices=['A', 'AAAA', 'PTR']),
+            zone=dict(type='str', required=True),
             pdns_host=dict(type='str', default='127.0.0.1'),
             pdns_port=dict(type='int', default=8081),
             pdns_prot=dict(type='str', default='http', choices=['http', 'https']),
@@ -206,8 +179,8 @@ def main():
                                  prot=module.params['pdns_prot'],
                                  api_key=module.params['pdns_api_key'])
 
-    changed, zone = ensure(module, pdns_client)
-    module.exit_json(changed=changed, zone=zone)
+    changed, record = ensure(module, pdns_client)
+    module.exit_json(changed=changed, record=record)
 
 
 # import module snippets
