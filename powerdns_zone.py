@@ -79,8 +79,10 @@ class PowerDNSClient:
                         }
 
     def _handle_request(self, req):
-        if req.status_code in [200, 201]:
-            return json.loads(req.text)
+        if req.status_code in [200, 201, 204]:
+            if req.text:
+                return json.loads(req.text)
+            return dict()
         elif req.status_code == 404:
             error_message = 'Not found'
         else:
