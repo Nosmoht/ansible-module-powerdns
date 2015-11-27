@@ -215,8 +215,11 @@ def main():
                                  prot=module.params['pdns_prot'],
                                  api_key=module.params['pdns_api_key'])
 
-    changed, zone = ensure(module, pdns_client)
-    module.exit_json(changed=changed, zone=zone)
+    try:
+        changed, zone = ensure(module, pdns_client)
+        module.exit_json(changed=changed, zone=zone)
+    except Exception as e:
+        module.fail_json(msg='Error: {0}'.format(str(e)))
 
 
 # import module snippets

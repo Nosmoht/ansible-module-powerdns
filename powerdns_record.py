@@ -110,7 +110,7 @@ class PowerDNSClient:
         elif 'errors' in request_json:
             request_error = request_json.get('errors')
         else:
-            request_error = 'DONT KNOW'
+            request_error = 'No error message found'
         return request_error
 
     def _get_zones_url(self, server):
@@ -203,8 +203,11 @@ def main():
                                  prot=module.params['pdns_prot'],
                                  api_key=module.params['pdns_api_key'])
 
-    changed, record = ensure(module, pdns_client)
-    module.exit_json(changed=changed, record=record)
+    try:
+        changed, record = ensure(module, pdns_client)
+        module.exit_json(changed=changed, record=record)
+    except Exception as e:
+        module.fail_json(msg='Error: {0}'.format(str(e)))
 
 
 # import module snippets
