@@ -8,20 +8,30 @@ short_description: Manage PowerDNS records
 description:
 - Create, update or delete a PowerDNS records using API
 options:
+  content:
+    description:
+    - Content of the record
+    - Could be an ip address or hostname
   name:
     description:
     - Record name
+    - If name is not an FQDN, zone will be added at the end to create an FQDN
     required: true
   server:
     description:
-    - Server name
+    - Server name.
     required: false
     default: localhost
+  ttl:
+    description:
+    - Record TTL
+    required: false
+    default: 86400
   type:
     description:
     - Record type
     required: false
-    choices: ['A', 'AAAA', 'PTR']
+    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV']
     default: None
   zone:
     description:
@@ -39,7 +49,7 @@ options:
     default: 8081
   pdns_prot:
     description:
-    - Protocol used to connect to PowerDNS API
+    - Protocol used by PowerDNS API
     required: false
     default: http
     choices: ['http', 'https']
@@ -115,42 +125,52 @@ class PowerDNSClient:
             return None
         return self._handle_request(req)
 
-    def create_record(self, server, zone, name, rtype, content):
+    def get_record(self, server, zone, name):
+        return dict()
+
+    def create_record(self, server, zone, name, rtype, content, disabled, ttl):
         url = self._get_zone_url(server=server, name=zone)
         record_content = list()
-        record_content.append(dict(content=content, disabled='false', name=name, ttl=86400, type=rtype))
+        record_content.append(dict(content=content, disabled=disabled, name=name, ttl=ttl, type=rtype))
         record = dict(name=name, type=rtype, changetype='REPLACE', records=record_content)
         rrsets = list()
         rrsets.append(record)
         data = dict(rrsets=rrsets)
+        #        module.fail_json(msg='{data} {url}'.format(data=json.dumps(data), url=url))
         req = requests.patch(url=url, data=json.dumps(data), headers=self.headers)
         return self._handle_request(req)
 
 
 def ensure(module, pdns_client):
     content = module.params['content']
-    rtype = module.params['type']
-    zone = module.params['zone']
+    disabled = module.params['disabled']
     name = module.params['name']
-    if not zone in name:
-        name = '{name}.{zone}'.format(name=name, zone=zone)
+    rtype = module.params['type']
+    ttl = module.params['ttl']
+    zone_name = module.params['zone']
+
+    if not zone_name in name:
+        name = '{name}.{zone}'.format(name=name, zone=zone_name)
     server = module.params['server']
     state = module.params['state']
 
     try:
-        zone = pdns_client.get_zone(server, zone)
+        zone = pdns_client.get_zone(server, zone_name)
     except PowerDNSError as e:
         module.fail_json(
-            msg='Could not get zone {name}: HTTP {code}: {err}'.format(name=zone, code=e.status_code, err=e.message))
+            msg='Could not get zone {name}: HTTP {code}: {err}'.format(name=zone_name, code=e.status_code,
+                                                                       err=e.message))
 
     if not zone:
-        module.fail_json(msg='Zone not found: {name}'.format(zone=zone))
+        module.fail_json(msg='Zone not found: {name}'.format(zone=zone_name))
 
     records = zone.get('records')
     record = next((item for item in records if item['content'] == content), None)
     if not record and state == 'present':
         try:
-            pdns_client.create_record(server=server, zone=zone, name=name, rtype=rtype, content=content)
+            pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content, ttl=ttl,
+                                      disabled=disabled)
+            return True, pdns_client.get_record(server=server, zone=zone_name, name=name)
         except PowerDNSError as e:
             module.fail_json(
                 msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -159,14 +179,16 @@ def ensure(module, pdns_client):
 
 
 def main():
-    global module
+    #    global module
     module = AnsibleModule(
         argument_spec=dict(
             content=dict(type='str', required=False),
+            disabled=dict(type='bool', default=False),
             name=dict(type='str', required=True),
             server=dict(type='str', default='localhost'),
             state=dict(type='str', default='present', choices=['present', 'absent']),
-            type=dict(type='str', required=False, choices=['A', 'AAAA', 'PTR']),
+            ttl=dict(type='int', default=86400),
+            type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV']),
             zone=dict(type='str', required=True),
             pdns_host=dict(type='str', default='127.0.0.1'),
             pdns_port=dict(type='int', default=8081),

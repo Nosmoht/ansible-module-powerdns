@@ -46,6 +46,7 @@ author: "Thomas Krahn (@nosmoht)"
 '''
 
 EXAMPLES = '''
+# Ensure a zone is present
 - powerdns_zone:
     name: zone01.internal.example.com
     kind: master
@@ -55,7 +56,14 @@ EXAMPLES = '''
     state: present
     pdns_host: powerdns.example.cm
     pdns_port: 8080
-    pdns_prot: http
+    pdns_api_key: topsecret
+
+# Ensure a zone is absent
+- powerdns_zone:
+    name: old-zone.internal.example.com
+    state: absent
+    pdns_host: powerdns.example.cm
+    pdns_port: 8080
     pdns_api_key: topsecret
 '''
 
@@ -170,18 +178,18 @@ def ensure(module, pdns_client):
                 module.fail_json(
                     msg='Could not delete zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                   err=e.message))
-        # Compare nameservers
-#        ns_diff = diff(nameservers if nameservers else list(), zone.get('nameservers', list()))
-#        if ns_diff:
-#            try:
-#                if module.check_mode:
-#                    module.exit_json(changed=True, zone=zone)
-#                pdns_client.update_zone(server, zone)
-#                return True, pdns_client.get_zone(name)
-#            except PowerDNSError as e:
-#                module.fail_json(
-#                    msg='Could not update zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
-#                                                                                  err=e.message))
+                # Compare nameservers
+                #        ns_diff = diff(nameservers if nameservers else list(), zone.get('nameservers', list()))
+                #        if ns_diff:
+                #            try:
+                #                if module.check_mode:
+                #                    module.exit_json(changed=True, zone=zone)
+                #                pdns_client.update_zone(server, zone)
+                #                return True, pdns_client.get_zone(name)
+                #            except PowerDNSError as e:
+                #                module.fail_json(
+                #                    msg='Could not update zone {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
+                #                                                                                  err=e.message))
     return False, zone
 
 
