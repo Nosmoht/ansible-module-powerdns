@@ -31,7 +31,7 @@ options:
     description:
     - Record type
     required: false
-    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV']
+    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV']
     default: None
   zone:
     description:
@@ -188,7 +188,7 @@ def main():
             server=dict(type='str', default='localhost'),
             state=dict(type='str', default='present', choices=['present', 'absent']),
             ttl=dict(type='int', default=86400),
-            type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV']),
+            type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV']),
             zone=dict(type='str', required=True),
             pdns_host=dict(type='str', default='127.0.0.1'),
             pdns_port=dict(type='int', default=8081),
