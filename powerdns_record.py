@@ -165,7 +165,7 @@ def ensure(module, pdns_client):
         module.fail_json(msg='Zone not found: {name}'.format(zone=zone_name))
 
     records = zone.get('records')
-    record = next((item for item in records if item['content'] == content), None)
+    record = next((item for item in records if item['name'] == name), None)
     if not record and state == 'present':
         try:
             pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content, ttl=ttl,
@@ -175,7 +175,7 @@ def ensure(module, pdns_client):
             module.fail_json(
                 msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                 err=e.message))
-    return False, zone
+    return False, record
 
 
 def main():
