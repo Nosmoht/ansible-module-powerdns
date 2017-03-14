@@ -94,7 +94,7 @@ class PowerDNSClient:
                         }
 
     def _handle_request(self, req):
-        if req.status_code in [200, 201]:
+        if req.status_code in [200, 201, 204]:
             return json.loads(req.text)
         elif req.status_code == 404:
             error_message = 'Not found'
@@ -116,7 +116,7 @@ class PowerDNSClient:
         return request_error
 
     def _get_zones_url(self, server):
-        return '{url}/servers/{server}/zones'.format(url=self.url, server=server)
+        return '{url}/api/v1/servers/{server}/zones'.format(url=self.url, server=server)
 
     def _get_zone_url(self, server, name):
         return '{url}/{name}'.format(url=self._get_zones_url(server), name=name)
@@ -133,8 +133,8 @@ class PowerDNSClient:
 
     def _get_request_data(self, changetype, server, zone, name, rtype, content=None, disabled=None, ttl=None):
         record_content = list()
-        record_content.append(dict(content=content, disabled=disabled, name=name, ttl=ttl, type=rtype))
-        record = dict(name=name, type=rtype, changetype=changetype, records=record_content)
+        record_content.append(dict(content=content, disabled=disabled))
+        record = dict(name=name, type=rtype, changetype=changetype, records=record_content, ttl=ttl)
         rrsets = list()
         rrsets.append(record)
         data = dict(rrsets=rrsets)
@@ -179,7 +179,7 @@ def ensure(module, pdns_client):
         module.fail_json(msg='Zone not found: {name}'.format(zone=zone_name))
 
     # Try to find the record by name and type
-    record = next((item for item in zone.get('records') if (item['name'] == name and item['type'] == rtype)), None)
+    record = next((item for item in zone.get('rrsets') if (item['name'] == name and item['type'] == rtype)), None)
 
     if state == 'present':
         # Create record if it does not exist
