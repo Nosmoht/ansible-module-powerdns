@@ -179,7 +179,7 @@ def ensure(module, pdns_client):
         module.fail_json(msg='Zone not found: {name}'.format(zone=zone_name))
 
     # Try to find the record by name and type
-    record = next((item for item in zone.get('records') if (item['name'] == name and item['type'] == rtype)), None)
+    record = next((item for item in zone.get('rrsets') if (item['name'] == name and item['type'] == rtype)), None)
 
     if state == 'present':
         # Create record if it does not exist
