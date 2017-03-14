@@ -133,8 +133,8 @@ class PowerDNSClient:
 
     def _get_request_data(self, changetype, server, zone, name, rtype, content=None, disabled=None, ttl=None):
         record_content = list()
-        record_content.append(dict(content=content, disabled=disabled, name=name, ttl=ttl, type=rtype))
-        record = dict(name=name, type=rtype, changetype=changetype, records=record_content)
+        record_content.append(dict(content=content, disabled=disabled))
+        record = dict(name=name, type=rtype, changetype=changetype, records=record_content, ttl=ttl)
         rrsets = list()
         rrsets.append(record)
         data = dict(rrsets=rrsets)
