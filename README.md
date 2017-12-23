@@ -63,6 +63,22 @@ Ensure AAAA record
     pdns_prot: https
 ```
 
+Do not verify SSL certificate
+Ensure AAAA record
+```yaml
+- powerdns_record:
+    name: host01.zone01.internal.example.com.
+    zone: zone01.internal.example.com
+    type: AAAA
+    content: 2001:cdba:0000:0000:0000:0000:3257:9652
+    ttl: 1440
+    pdns_host: powerdns.example.com
+    pdns_port: 8443
+    pdns_api_key: topsecret
+    pdns_prot: https
+    strict_ssl_checking: false
+```
+
 Ensure CNAME record
 ```yaml
 - powerdns_record:
