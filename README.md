@@ -63,8 +63,8 @@ Ensure AAAA record
     pdns_prot: https
 ```
 
-Do not verify SSL certificate
-Ensure AAAA record
+Do not verify SSL certificate (this is a security risk)
+
 ```yaml
 - powerdns_record:
     name: host01.zone01.internal.example.com.
