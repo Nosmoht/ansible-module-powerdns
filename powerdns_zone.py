@@ -80,7 +80,7 @@ class PowerDNSError(Exception):
 
 class PowerDNSClient:
     def __init__(self, host, port, prot, api_key):
-        self.url = '{prot}://{host}:{port}'.format(prot=prot, host=host, port=port)
+        self.url = '{prot}://{host}:{port}/api/v1'.format(prot=prot, host=host, port=port)
         self.headers = {'X-API-Key': api_key,
                         'content-type': 'application/json',
                         'accept': 'application/json'
