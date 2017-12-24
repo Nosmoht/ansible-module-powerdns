@@ -58,6 +58,10 @@ options:
   pdns_api_key:
     description:
     - API Key to authenticate through PowerDNS API
+  strict_ssl_checking:
+    description:
+    - Disables strict certificate checking
+    default: false
 author: "Thomas Krahn (@nosmoht)"
 '''
 
@@ -86,16 +90,22 @@ class PowerDNSError(Exception):
 
 
 class PowerDNSClient:
-    def __init__(self, host, port, prot, api_key):
-        self.url = '{prot}://{host}:{port}'.format(prot=prot, host=host, port=port)
+    def __init__(self, host, port, prot, api_key, verify):
+        self.url = '{prot}://{host}:{port}/api/v1'.format(prot=prot, host=host, port=port)
         self.headers = {'X-API-Key': api_key,
                         'content-type': 'application/json',
                         'accept': 'application/json'
                         }
+        self.verify = verify
 
     def _handle_request(self, req):
         if req.status_code in [200, 201, 204]:
-            return json.loads(req.text)
+            if req.text:
+                try:
+                    return json.loads(req.text)
+                except Exception as e:
+                    print(e) # same as yield
+            return dict()
         elif req.status_code == 404:
             error_message = 'Not found'
         else:
@@ -122,7 +132,7 @@ class PowerDNSClient:
         return '{url}/{name}'.format(url=self._get_zones_url(server), name=name)
 
     def get_zone(self, server, name):
-        req = requests.get(url=self._get_zone_url(server, name), headers=self.headers)
+        req = requests.get(url=self._get_zone_url(server, name), headers=self.headers, verify=self.verify)
         if req.status_code == 422:  # zone does not exist
             return None
         return self._handle_request(req)
@@ -144,14 +154,14 @@ class PowerDNSClient:
         url = self._get_zone_url(server=server, name=zone)
         data = self._get_request_data(changetype='REPLACE', server=server, zone=zone, name=name, rtype=rtype,
                                       content=content, disabled=disabled, ttl=ttl)
-        req = requests.patch(url=url, data=json.dumps(data), headers=self.headers)
+        req = requests.patch(url=url, data=json.dumps(data), headers=self.headers, verify=self.verify)
         return self._handle_request(req)
 
     def delete_record(self, server, zone, name, rtype):
         url = self._get_zone_url(server=server, name=zone)
         data = self._get_request_data(changetype='DELETE', server=server, zone=zone, name=name, rtype=rtype)
         # module.fail_json(msg=json.dumps(data))
-        req = requests.patch(url=url, data=json.dumps(data), headers=self.headers)
+        req = requests.patch(url=url, data=json.dumps(data), headers=self.headers, verify=self.verify)
         return self._handle_request(req)
 
 
@@ -230,6 +240,7 @@ def main():
                     pdns_port=dict(type='int', default=8081),
                     pdns_prot=dict(type='str', default='http', choices=['http', 'https']),
                     pdns_api_key=dict(type='str', required=False),
+                    strict_ssl_checking=dict(type='boolean', default=True),
             ),
             supports_check_mode=True,
     )
@@ -237,7 +248,8 @@ def main():
     pdns_client = PowerDNSClient(host=module.params['pdns_host'],
                                  port=module.params['pdns_port'],
                                  prot=module.params['pdns_prot'],
-                                 api_key=module.params['pdns_api_key'])
+                                 api_key=module.params['pdns_api_key'],
+                                 verify=module.params['strict_ssl_checking'])
 
     try:
         changed, record = ensure(module, pdns_client)
