@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 DOCUMENTATION = '''
@@ -214,7 +214,7 @@ def main():
             pdns_port=dict(type='int', default=8081),
             pdns_prot=dict(type='str', default='http', choices=['http', 'https']),
             pdns_api_key=dict(type='str', required=False),
-            strict_ssl_checking=dict(type='boolean', default=True),
+            strict_ssl_checking=dict(type='bool', default=True),
         ),
         supports_check_mode=True,
     )
