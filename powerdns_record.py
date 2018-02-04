@@ -126,7 +126,7 @@ class PowerDNSClient:
         return request_error
 
     def _get_zones_url(self, server):
-        return '{url}/api/v1/servers/{server}/zones'.format(url=self.url, server=server)
+        return '{url}/servers/{server}/zones'.format(url=self.url, server=server)
 
     def _get_zone_url(self, server, name):
         return '{url}/{name}'.format(url=self._get_zones_url(server), name=name)
