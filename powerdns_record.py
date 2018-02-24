@@ -203,7 +203,7 @@ def ensure(module, pdns_client):
                         msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
         # Check if changeable parameters match, else update record.
-        if record.get('content', None) != content or record.get('ttl', None) != ttl:
+        if content not in [c.get('content') for c in record["records"]] or record.get('ttl', None) != ttl:
             try:
                 pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content,
                                           ttl=ttl, disabled=disabled)
