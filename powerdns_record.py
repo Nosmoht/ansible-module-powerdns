@@ -33,7 +33,7 @@ options:
     description:
     - Record type
     required: false
-    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV']
+    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']
     default: None
   zone:
     description:
@@ -152,8 +152,16 @@ class PowerDNSClient:
 
     def create_record(self, server, zone, name, rtype, content, disabled, ttl):
         url = self._get_zone_url(server=server, name=zone)
-        data = self._get_request_data(changetype='REPLACE', server=server, zone=zone, name=name, rtype=rtype,
-                                      content=content, disabled=disabled, ttl=ttl)
+        data = self._get_request_data(
+            changetype='REPLACE',
+            server=server,
+            zone=zone,
+            name=name,
+            rtype=rtype,
+            content=content if rtype != 'TXT' else '"{}"'.format(content),
+            disabled=disabled,
+            ttl=ttl
+        )
         req = requests.patch(url=url, data=json.dumps(data), headers=self.headers, verify=self.verify)
         return self._handle_request(req)
 
@@ -234,7 +242,7 @@ def main():
                     server=dict(type='str', default='localhost'),
                     state=dict(type='str', default='present', choices=['present', 'absent']),
                     ttl=dict(type='int', default=86400),
-                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV']),
+                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']),
                     zone=dict(type='str', required=True),
                     pdns_host=dict(type='str', default='127.0.0.1'),
                     pdns_port=dict(type='int', default=8081),
