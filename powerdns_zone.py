@@ -45,7 +45,7 @@ options:
   strict_ssl_checking:
     description:
     - Disables strict certificate checking
-    default: false
+    default: true
 author: "Thomas Krahn (@nosmoht)"
 '''
 
