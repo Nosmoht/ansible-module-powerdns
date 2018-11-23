@@ -97,7 +97,7 @@ class PowerDNSClient:
         if req.status_code in [200, 201, 204]:
             if req.text:
                 try:
-                    return json.loads(req.text)
+                    return req.json()
                 except Exception as e:
                     print(e) # same as yield
             return dict()
