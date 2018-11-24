@@ -35,6 +35,16 @@ options:
     required: false
     choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']
     default: None
+  set_ptr:
+    description:
+    - >
+      If set to true, the server will find the matching reverse zone and create
+      a PTR there. Existing PTR records are replaced. If no matching reverse
+      Zone, an error is thrown. Only valid in client bodies, only valid for A
+      and AAAA types.
+    required: false
+    choices: ['True', 'False']
+    default: False
   zone:
     description:
     - Name of zone where to ensure the record
@@ -182,16 +192,23 @@ class PowerDNSClient:
 
         return rrset
 
-    def _get_request_data(self, changetype, server, zone, name, rtype, content=None, disabled=None, ttl=None):
+    def _get_request_data(self, changetype, server, zone, name, rtype, set_ptr=False, content=None, disabled=None, ttl=None):
         record_content = list()
-        record_content.append(dict(content=content, disabled=disabled))
+        if content:
+            for record in content:
+                entry = dict(content=record, disabled=disabled)
+                if rtype in ['A', 'AAAA'] and set_ptr:
+                    entry['set-ptr'] = True
+
+                record_content.append(entry)
+
         record = dict(name=name, type=rtype, changetype=changetype, records=record_content, ttl=ttl)
         rrsets = list()
         rrsets.append(record)
         data = dict(rrsets=rrsets)
         return data
 
-    def create_record(self, server, zone, name, rtype, content, disabled, ttl):
+    def create_record(self, server, zone, name, rtype, content, disabled, ttl, set_ptr):
         url = self._get_zone_url(server=server, name=zone)
 
         # Ensure record name is fully canonical
@@ -204,6 +221,7 @@ class PowerDNSClient:
             name=canonical_name,
             rtype=rtype,
             content=content if rtype != 'TXT' else '"{}"'.format(content),
+            set_ptr=set_ptr,
             disabled=disabled,
             ttl=ttl
         )
@@ -224,6 +242,7 @@ def ensure(module, pdns_client):
     disabled = module.params['disabled']
     name = module.params['name']
     rtype = module.params['type']
+    set_ptr = module.params['set_ptr']
     ttl = module.params['ttl']
     zone_name = module.params['zone']
     server = module.params['server']
@@ -243,11 +262,13 @@ def ensure(module, pdns_client):
     record = pdns_client.get_record(name=name, server=server, rtype=rtype, zone=zone_name)
 
     if state == 'present':
+        record_content = []
         # Create record if it does not exist
-        if not record:
+        if not record['records']:
+            record_content.append(content)
             try:
-                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content,
-                                          ttl=ttl, disabled=disabled)
+                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                                          set_ptr=set_ptr, ttl=ttl, disabled=disabled)
                 return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
@@ -255,16 +276,17 @@ def ensure(module, pdns_client):
                                                                                         err=e.message))
         # Check if changeable parameters match, else update record.
         if content not in [c.get('content') for c in record["records"]] or record.get('ttl', None) != ttl:
+            record_content.append(content)
             try:
-                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content,
-                                          ttl=ttl, disabled=disabled)
+                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                                          set_ptr=set_ptr, ttl=ttl, disabled=disabled)
                 return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not update record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
     elif state == 'absent':
-        if record:
+        if record['records']:
             try:
                 pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
                 return True, None
@@ -283,6 +305,7 @@ def main():
                     disabled=dict(type='bool', default=False),
                     name=dict(type='str', required=True),
                     server=dict(type='str', default='localhost'),
+                    set_ptr=dict(type='bool', default=False),
                     state=dict(type='str', default='present', choices=['present', 'absent']),
                     ttl=dict(type='int', default=86400),
                     type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']),
