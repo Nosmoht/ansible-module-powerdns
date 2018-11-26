@@ -85,11 +85,9 @@ class PowerDNSError(Exception):
 class PowerDNSClient:
     def __init__(self, host, port, prot, api_key, verify):
         self.url = '{prot}://{host}:{port}/api/v1'.format(prot=prot, host=host, port=port)
-        self.headers = {'X-API-Key': api_key,
-                        'content-type': 'application/json',
-                        'accept': 'application/json'
-                        }
-        self.verify = verify
+        self.session = requests.Session()
+        self.session.headers.update({'X-API-Key': api_key})
+        self.session.verify = verify
 
     def _handle_request(self, req):
         if req.status_code in [200, 201, 204]:
@@ -125,22 +123,21 @@ class PowerDNSClient:
         return '{url}/{name}'.format(url=self._get_zones_url(server), name=name)
 
     def get_zone(self, server, name):
-        req = requests.get(url=self._get_zone_url(server, name), headers=self.headers, verify=self.verify)
+        req = self.session.get(url=self._get_zone_url(server, name))
         if req.status_code == 422:  # zone does not exist
             return None
         return self._handle_request(req)
 
     def create_zone(self, server, data):
-        req = requests.post(url=self._get_zones_url(server, ), data=json.dumps(data), headers=self.headers, verify=self.verify)
+        req = self.session.post(url=self._get_zones_url(server), json=data)
         return self._handle_request(req)
 
     def delete_zone(self, server, name):
-        req = requests.delete(url=self._get_zone_url(server, name), headers=self.headers, verify=self.verify)
+        req = self.session.delete(url=self._get_zone_url(server, name))
         return self._handle_request(req)
 
     def update_zone(self, server, zone):
-        req = requests.patch(url=self._get_zone_url(server=server, name=zone.get('name')), data=zone,
-                             headers=self.headers, verify=self.verify)
+        req = self.session.patch(url=self._get_zone_url(server=server, name=zone.get('name')), data=zone)
         return self._handle_request(req)
 
 
