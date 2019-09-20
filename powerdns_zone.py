@@ -45,7 +45,7 @@ options:
   strict_ssl_checking:
     description:
     - Disables strict certificate checking
-    default: false
+    default: true
 author: "Thomas Krahn (@nosmoht)"
 '''
 
@@ -71,7 +71,11 @@ EXAMPLES = '''
     pdns_api_key: topsecret
 '''
 
-import requests
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
 
 
 class PowerDNSError(Exception):
@@ -215,6 +219,9 @@ def main():
         ),
         supports_check_mode=True,
     )
+
+    if not HAS_REQUESTS:
+        module.fail_json(msg="requests must be installed to use this module.")
 
     pdns_client = PowerDNSClient(host=module.params['pdns_host'],
                                  port=module.params['pdns_port'],
