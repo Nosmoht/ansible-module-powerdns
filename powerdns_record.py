@@ -72,7 +72,7 @@ EXAMPLES = '''
     content: 192.168.1.234
     state: present
     zone: internal.example.com
-    pdns_host: powerdns.example.cm
+    pdns_host: powerdns.example.com
     pdns_port: 8080
     pdns_prot: http
     pdns_api_key: topsecret
@@ -104,7 +104,7 @@ class PowerDNSClient:
         if req.status_code in [200, 201, 204]:
             if req.text:
                 try:
-                    return json.loads(req.text)
+                    return req.json()
                 except Exception as e:
                     print(e) # same as yield
             return dict()
@@ -127,11 +127,21 @@ class PowerDNSClient:
             request_error = 'No error message found'
         return request_error
 
+    def _get_search_url(self, server):
+        return '{url}/servers/{server}/search-data'.format(url=self.url,
+                                                           server=server)
     def _get_zones_url(self, server):
         return '{url}/servers/{server}/zones'.format(url=self.url, server=server)
 
     def _get_zone_url(self, server, name):
         return '{url}/{name}'.format(url=self._get_zones_url(server), name=name)
+
+    @staticmethod
+    def _make_canonical(name):
+        if not name.endswith('.'):
+            name += '.'
+
+        return name
 
     def get_zone(self, server, name):
         req = self.session.get(url=self._get_zone_url(server, name))
@@ -139,9 +149,38 @@ class PowerDNSClient:
             return None
         return self._handle_request(req)
 
-    def get_record(self, server, zone, name):
-        # TODO: implementation
-        return dict()
+    def get_record(self, server, zone, name, rtype):
+        """Search for a given record (name) in the specified zone."""
+        url = self._get_search_url(server)
+        params = {'q': name}
+
+        resp = self._handle_request(self.session.get(url=url, params=params))
+
+        # Canonicalize record name and zone
+        canonical_name = self._make_canonical(name)
+        canonical_zone = self._make_canonical(zone)
+
+        # Convert search result response to RRSet object
+        rrset = dict(records=[], comments=[])
+
+        for record in resp:
+            if record['object_type'] != 'record' or record['type'] != rtype:
+                continue
+
+            if record['name'] == canonical_name and record['zone'] == canonical_zone:
+
+                if 'name' not in rrset:
+                    rrset['name'] = record['name']
+                if 'type' not in rrset:
+                    rrset['type'] = record['type']
+                if 'ttl' not in rrset:
+                    rrset['ttl'] = record['ttl']
+
+                rrentry = dict(content=record['content'],
+                               disabled=record['disabled'])
+                rrset['records'].append(rrentry)
+
+        return rrset
 
     def _get_request_data(self, changetype, server, zone, name, rtype, content=None, disabled=None, ttl=None):
         record_content = list()
@@ -154,11 +193,15 @@ class PowerDNSClient:
 
     def create_record(self, server, zone, name, rtype, content, disabled, ttl):
         url = self._get_zone_url(server=server, name=zone)
+
+        # Ensure record name is fully canonical
+        canonical_name = self._make_canonical(name)
+
         data = self._get_request_data(
             changetype='REPLACE',
             server=server,
             zone=zone,
-            name=name,
+            name=canonical_name,
             rtype=rtype,
             content=content if rtype != 'TXT' else '"{}"'.format(content),
             disabled=disabled,
@@ -168,9 +211,10 @@ class PowerDNSClient:
         return self._handle_request(req)
 
     def delete_record(self, server, zone, name, rtype):
+        canonical_name = self._make_canonical(name)
         url = self._get_zone_url(server=server, name=zone)
-        data = self._get_request_data(changetype='DELETE', server=server, zone=zone, name=name, rtype=rtype)
-        # module.fail_json(msg=json.dumps(data))
+        data = self._get_request_data(changetype='DELETE', server=server,
+                                      zone=zone, name=canonical_name, rtype=rtype)
         req = self.session.patch(url=url, json=data)
         return self._handle_request(req)
 
@@ -182,24 +226,21 @@ def ensure(module, pdns_client):
     rtype = module.params['type']
     ttl = module.params['ttl']
     zone_name = module.params['zone']
-
-    if zone_name not in name:
-        name = '{name}.{zone}'.format(name=name, zone=zone_name)
     server = module.params['server']
     state = module.params['state']
 
-    try:
-        zone = pdns_client.get_zone(server, zone_name)
-    except PowerDNSError as e:
-        module.fail_json(
-                msg='Could not get zone {name}: HTTP {code}: {err}'.format(name=zone_name, code=e.status_code,
-                                                                           err=e.message))
+    # Remove trailing periods on records
+    # Will be added later during CRUD operations.
+    if name.endswith('.'):
+        name = name.rstrip('.')
+    if zone_name.endswith('.'):
+        zone_name = zone_name.rstrip('.')
 
-    if not zone:
-        module.fail_json(msg='Zone not found: {name}'.format(zone=zone_name))
+    if zone_name not in name:
+        name = '{name}.{zone}'.format(name=name, zone=zone_name)
 
     # Try to find the record by name and type
-    record = next((item for item in zone.get('rrsets') if (item['name'] == name and item['type'] == rtype)), None)
+    record = pdns_client.get_record(name=name, server=server, rtype=rtype, zone=zone_name)
 
     if state == 'present':
         # Create record if it does not exist
@@ -207,7 +248,7 @@ def ensure(module, pdns_client):
             try:
                 pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content,
                                           ttl=ttl, disabled=disabled)
-                return True, pdns_client.get_record(server=server, zone=zone_name, name=name)
+                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -217,7 +258,7 @@ def ensure(module, pdns_client):
             try:
                 pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=content,
                                           ttl=ttl, disabled=disabled)
-                return True, pdns_client.get_record(server=server, zone=zone_name, name=name)
+                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not update record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
