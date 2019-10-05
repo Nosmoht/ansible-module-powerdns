@@ -92,4 +92,21 @@ Ensure CNAME record
     pdns_prot: http
 ```
 
+Ensure multiple MX records
+```yaml
+- powerdns_record:
+    name: zone01.internal.example.com.
+    zone: zone01.internal.example.com
+    type: MX
+    exclusive: no
+    content: "{{ item }}"
+    pdns_host: powerdns.example.com
+    pdns_port: 80
+    pdns_api_key: topsecret
+    pdns_prot: http
+  loop:
+    - 10 mx1.zone01.internal.example.com
+    - 10 mx2.zone01.internal.example.com
+```
+
 Note the trailing '.' following most records, if not present will result in the error "Domain record is not canonical".

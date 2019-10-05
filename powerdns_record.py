@@ -14,6 +14,12 @@ options:
     description:
     - Content of the record
     - Could be an ip address or hostname
+  exclusive:
+    description:
+      - Whether to remove all other non-specified records from the recordset.
+        Applicable to A, AAAA, MX, SRV, and TXT records.
+    required: false
+    default: true
   name:
     description:
     - Record name
@@ -220,7 +226,7 @@ class PowerDNSClient:
             zone=zone,
             name=canonical_name,
             rtype=rtype,
-            content=content if rtype != 'TXT' else '"{}"'.format(content),
+            content=content,
             set_ptr=set_ptr,
             disabled=disabled,
             ttl=ttl
@@ -240,6 +246,7 @@ class PowerDNSClient:
 def ensure(module, pdns_client):
     content = module.params['content']
     disabled = module.params['disabled']
+    exclusive = module.params['exclusive']
     name = module.params['name']
     rtype = module.params['type']
     set_ptr = module.params['set_ptr']
@@ -260,11 +267,24 @@ def ensure(module, pdns_client):
 
     # Try to find the record by name and type
     record = pdns_client.get_record(name=name, server=server, rtype=rtype, zone=zone_name)
+    existing_content = [c.get('content') for c in record["records"]]
+
+    # Sanitize user-provided input for certain record types
+    if content:
+        if rtype == 'AAAA':
+            # Lowercase IPv6 addresses to match case returned by the API.
+            # Necessary for later comparisons.
+            content = content.lower()
+
+        # Ensure TXT records are double quoted
+        if rtype == 'TXT' and not (content.startswith('"') and content.endswith('"')):
+            content = '"{}"'.format(content.strip('"'))
 
     if state == 'present':
         record_content = []
+
         # Create record if it does not exist
-        if not record['records']:
+        if not existing_content:
             record_content.append(content)
             try:
                 pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
@@ -275,8 +295,14 @@ def ensure(module, pdns_client):
                         msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
         # Check if changeable parameters match, else update record.
-        if content not in [c.get('content') for c in record["records"]] or record.get('ttl', None) != ttl:
+        if content not in existing_content or record.get('ttl', None) != ttl or (exclusive and len(existing_content) > 1):
+            # Add provided content to record content payload
             record_content.append(content)
+
+            # Add existing content to payload if not exclusive
+            if not exclusive:
+                record_content = record_content + existing_content
+
             try:
                 pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
                                           set_ptr=set_ptr, ttl=ttl, disabled=disabled)
@@ -286,7 +312,28 @@ def ensure(module, pdns_client):
                         msg='Could not update record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
     elif state == 'absent':
-        if record['records']:
+        if existing_content and exclusive:
+            # Delete entire record
+            try:
+                pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
+                return True, None
+            except PowerDNSError as e:
+                module.fail_json(
+                        msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
+                                                                                        err=e.message))
+        elif existing_content and not exclusive and content in existing_content:
+            # Remove specified record from the recordset. Update record.
+            existing_content.remove(content)
+            record_content = existing_content
+
+            try:
+                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                                          set_ptr=set_ptr, ttl=ttl, disabled=disabled)
+                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+            except PowerDNSError as e:
+                module.fail_json(
+                        msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
+                                                                                        err=e.message))
             try:
                 pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
                 return True, None
@@ -302,6 +349,7 @@ def main():
     module = AnsibleModule(
             argument_spec=dict(
                     content=dict(type='str', required=False),
+                    exclusive=dict(type='bool', default=True),
                     disabled=dict(type='bool', default=False),
                     name=dict(type='str', required=True),
                     server=dict(type='str', default='localhost'),
