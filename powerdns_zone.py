@@ -128,7 +128,7 @@ class PowerDNSClient:
 
     def get_zone(self, server, name):
         req = self.session.get(url=self._get_zone_url(server, name))
-        if req.status_code == 422:  # zone does not exist
+        if req.status_code in [404, 422]:  # zone does not exist
             return None
         return self._handle_request(req)
 
