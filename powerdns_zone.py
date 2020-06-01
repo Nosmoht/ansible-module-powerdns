@@ -111,14 +111,18 @@ class PowerDNSClient:
                             message=error_message)
 
     def _get_request_error_message(self, data):
-        request_json = data.json()
-        if 'error' in request_json:
-            request_error = request_json.get('error')
-        elif 'errors' in request_json:
-            request_error = request_json.get('errors')
-        else:
-            request_error = 'DONT KNOW'
-        return request_error
+        try:
+            request_json = data.json()
+            if 'error' in request_json:
+                request_error = request_json.get('error')
+            elif 'errors' in request_json:
+                request_error = request_json.get('errors')
+            else:
+                request_error = 'No error message found'
+            return request_error
+        except Exception:
+          pass
+        return data.text
 
     def _get_zones_url(self, server):
         return '{url}/servers/{server}/zones'.format(url=self.url, server=server)
@@ -128,7 +132,7 @@ class PowerDNSClient:
 
     def get_zone(self, server, name):
         req = self.session.get(url=self._get_zone_url(server, name))
-        if req.status_code == 422:  # zone does not exist
+        if req.status_code == 422 or req.status_code == 404:  # zone does not exist
             return None
         return self._handle_request(req)
 
