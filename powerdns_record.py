@@ -39,7 +39,7 @@ options:
     description:
     - Record type
     required: false
-    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']
+    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA']
     default: None
   set_ptr:
     description:
@@ -134,14 +134,18 @@ class PowerDNSClient:
                             message=error_message)
 
     def _get_request_error_message(self, data):
-        request_json = data.json()
-        if 'error' in request_json:
-            request_error = request_json.get('error')
-        elif 'errors' in request_json:
-            request_error = request_json.get('errors')
-        else:
-            request_error = 'No error message found'
-        return request_error
+        try:
+            request_json = data.json()
+            if 'error' in request_json:
+                request_error = request_json.get('error')
+            elif 'errors' in request_json:
+                request_error = request_json.get('errors')
+            else:
+                request_error = 'No error message found'
+            return request_error
+        except Exception:
+          pass
+        return data.text
 
     def _get_search_url(self, server):
         return '{url}/servers/{server}/search-data'.format(url=self.url,
@@ -287,8 +291,9 @@ def ensure(module, pdns_client):
         if not existing_content:
             record_content.append(content)
             try:
-                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
-                                          set_ptr=set_ptr, ttl=ttl, disabled=disabled)
+                if not module.check_mode:
+                    pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                                              set_ptr=set_ptr, ttl=ttl, disabled=disabled)
                 return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
@@ -304,8 +309,9 @@ def ensure(module, pdns_client):
                 record_content = record_content + existing_content
 
             try:
-                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
-                                          set_ptr=set_ptr, ttl=ttl, disabled=disabled)
+                if not module.check_mode:
+                    pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                                              set_ptr=set_ptr, ttl=ttl, disabled=disabled)
                 return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
                 module.fail_json(
@@ -315,7 +321,8 @@ def ensure(module, pdns_client):
         if existing_content and exclusive:
             # Delete entire record
             try:
-                pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
+                if not module.check_mode:
+                    pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
                 return True, None
             except PowerDNSError as e:
                 module.fail_json(
@@ -327,7 +334,8 @@ def ensure(module, pdns_client):
             record_content = existing_content
 
             try:
-                pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
+                if not module.check_mode:
+                    pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
                                           set_ptr=set_ptr, ttl=ttl, disabled=disabled)
                 return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
             except PowerDNSError as e:
@@ -335,7 +343,8 @@ def ensure(module, pdns_client):
                         msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
             try:
-                pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
+                if not module.check_mode:
+                    pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
                 return True, None
             except PowerDNSError as e:
                 module.fail_json(
@@ -356,7 +365,7 @@ def main():
                     set_ptr=dict(type='bool', default=False),
                     state=dict(type='str', default='present', choices=['present', 'absent']),
                     ttl=dict(type='int', default=86400),
-                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT']),
+                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA']),
                     zone=dict(type='str', required=True),
                     pdns_host=dict(type='str', default='127.0.0.1'),
                     pdns_port=dict(type='int', default=8081),
