@@ -39,7 +39,7 @@ options:
     description:
     - Record type
     required: false
-    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA', 'SSHFP']
+    choices: ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA', 'NS', 'SSHFP']
     default: None
   set_ptr:
     description:
@@ -247,6 +247,33 @@ class PowerDNSClient:
         return self._handle_request(req)
 
 
+def serial(content):
+    """ Returns the serial of the given SOA record. """
+    return content.split(' ')[2]
+
+
+def ignore_serial(content):
+    """ Returns the SOA record with the serial removed. """
+
+    parts = content.split(' ')
+    return ' '.join(parts[:2] + parts[3:])
+
+
+def matches_existing_content(rtype, content, existing_content):
+    """ Returns True if the content of the given record matches the existing
+    content (i.e. if no change is necessary).
+
+    """
+
+    # Ignore the serial in SOA records if it is 0, which signifies a serial
+    # that is automatically incremented (as often happens in PowerDNS setups).
+    if rtype == 'SOA' and serial(content) == '0':
+        content = ignore_serial(content)
+        existing_content = [ignore_serial(e) for e in existing_content]
+
+    return content in existing_content
+
+
 def ensure(module, pdns_client):
     content = module.params['content']
     disabled = module.params['disabled']
@@ -300,7 +327,7 @@ def ensure(module, pdns_client):
                         msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
                                                                                         err=e.message))
         # Check if changeable parameters match, else update record.
-        if content not in existing_content or record.get('ttl', None) != ttl or (exclusive and len(existing_content) > 1):
+        if not matches_existing_content(rtype, content, existing_content) or record.get('ttl', None) != ttl or (exclusive and len(existing_content) > 1):
             # Add provided content to record content payload
             record_content.append(content)
 
@@ -365,7 +392,7 @@ def main():
                     set_ptr=dict(type='bool', default=False),
                     state=dict(type='str', default='present', choices=['present', 'absent']),
                     ttl=dict(type='int', default=86400),
-                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA', 'SSHFP']),
+                    type=dict(type='str', required=False, choices=['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SOA', 'SRV', 'TXT', 'LUA', 'NS', 'SSHFP']),
                     zone=dict(type='str', required=True),
                     pdns_host=dict(type='str', default='127.0.0.1'),
                     pdns_port=dict(type='int', default=8081),

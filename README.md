@@ -49,6 +49,39 @@ Ensure A record
     pdns_prot: https
 ```
 
+Absent all A record: this will delete all A record, even you specified ip in content
+```yaml
+- powerdns_record:
+    name: host01.zone01.internal.example.com.
+    state: absent
+    zone: zone01.internal.example.com
+    type: A
+    content: 192.168.1.234
+    ttl: 1440
+    pdns_host: powerdns.example.com
+    pdns_port: 443
+    pdns_api_key: topsecret
+    pdns_prot: https
+```
+
+Absent particular A record: this will remove only one A record for specific ip
+```yaml
+- powerdns_record:
+    name: host01.zone01.internal.example.com.
+    state: absent
+    exclusive: false
+    zone: zone01.internal.example.com
+    type: A
+    content: 192.168.1.234
+    ttl: 1440
+    pdns_host: powerdns.example.com
+    pdns_port: 443
+    pdns_api_key: topsecret
+    pdns_prot: https
+```
+
+
+
 Ensure AAAA record
 ```yaml
 - powerdns_record:
