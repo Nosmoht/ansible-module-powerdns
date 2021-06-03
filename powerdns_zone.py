@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from requests.models import HTTPBasicAuth
+
+
 DOCUMENTATION = '''
 ---
 module: powerdns_zone
@@ -42,6 +45,12 @@ options:
   pdns_api_key:
     description:
     - API Key to authenticate through PowerDNS API
+  pdns_api_username:
+    description:
+    - API Username to authenticate through PowerDNS API with basic auth
+  pdns_api_password:
+    description:
+    - API Password to authenticate through PowerDNS API with basic auth
   strict_ssl_checking:
     description:
     - Disables strict certificate checking
@@ -73,6 +82,7 @@ EXAMPLES = '''
 
 try:
     import requests
+    from requests.auth import HTTPBasicAuth
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
@@ -87,10 +97,13 @@ class PowerDNSError(Exception):
 
 
 class PowerDNSClient:
-    def __init__(self, host, port, prot, api_key, verify):
+    def __init__(self, host, port, prot, api_key, api_username, api_password, verify):
         self.url = '{prot}://{host}:{port}/api/v1'.format(prot=prot, host=host, port=port)
         self.session = requests.Session()
-        self.session.headers.update({'X-API-Key': api_key})
+        if api_key:
+            self.session.headers.update({'X-API-Key': api_key})
+        elif (api_username and api_password):
+            self.session.auth = HTTPBasicAuth(api_username, api_password)
         self.session.verify = verify
 
     def _handle_request(self, req):
@@ -219,6 +232,8 @@ def main():
             pdns_port=dict(type='int', default=8081),
             pdns_prot=dict(type='str', default='http', choices=['http', 'https']),
             pdns_api_key=dict(type='str', required=False),
+            pdns_api_username=dict(type='str', required=False),
+            pdns_api_password=dict(type='str', required=False),
             strict_ssl_checking=dict(type='bool', default=True),
         ),
         supports_check_mode=True,
@@ -231,6 +246,8 @@ def main():
                                  port=module.params['pdns_port'],
                                  prot=module.params['pdns_prot'],
                                  api_key=module.params['pdns_api_key'],
+                                 api_username=module.params['pdns_api_username'],
+                                 api_password=module.params['pdns_api_password'],
                                  verify=module.params['strict_ssl_checking'])
 
     try:

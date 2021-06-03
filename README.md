@@ -142,4 +142,21 @@ Ensure multiple MX records
     - 10 mx2.zone01.internal.example.com
 ```
 
+Use HTTP Basic Auth instead of API Key
+```yaml
+- powerdns_record:
+    name: database.zone01.internal.example.com.
+    zone: zone01.internal.example.com
+    type: CNAME
+    content: host01.zone01.internal.example.com
+    pdns_host: powerdns.example.com
+    pdns_port: 80
+    pdns_api_username: myuser
+    pdns_api_password: mytopsecretpassword
+    pdns_prot: http
+```
+
+`pdns_api_key` takes preference if both `pdns_api_key` and `pdns_api_username`/`pdns_api_password` are supplied.
+
+
 Note the trailing '.' following most records, if not present will result in the error "Domain record is not canonical".
