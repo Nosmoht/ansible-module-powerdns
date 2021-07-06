@@ -1,3 +1,8 @@
+***IMPORTANT NOTE***
+
+*As i'm not using PowerDNS anymore i will not activly work on the library. Only merging your PR's.
+If anyone wants to add the library to the official Ansible module library feel free to do so. Just please add a note about me as the original author and a link to this repo :-)*
+
 PowerDNS Ansible library
 ==========
 - [Introduction](#introduction)
