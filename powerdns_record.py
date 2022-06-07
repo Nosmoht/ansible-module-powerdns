@@ -309,6 +309,7 @@ def ensure(module, pdns_client):
     # Try to find the record by name and type
     record = pdns_client.get_record(name=name, server=server, rtype=rtype, zone=zone_name)
     existing_content = [c.get('content') for c in record["records"]]
+    name_print = name + ("." if name[-1] != '.' else "")
 
     # Sanitize user-provided input for certain record types
     if content:
@@ -331,7 +332,11 @@ def ensure(module, pdns_client):
                 if not module.check_mode:
                     pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
                                               set_ptr=set_ptr, ttl=ttl, disabled=disabled)
-                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+                    new_record = pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+                else:
+                    new_record = {"type": rtype, "name": name_print, "records": [{"disabled": disabled, "content": x} for x in record_content], "ttl": ttl}
+                    record.pop('comments')
+                return True, {"diff":{"after": new_record, "before": record}}
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not create record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -349,7 +354,11 @@ def ensure(module, pdns_client):
                 if not module.check_mode:
                     pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
                                               set_ptr=set_ptr, ttl=ttl, disabled=disabled)
-                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+                    new_record = pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+                else:
+                    new_record = {"type": rtype, "name": name_print, "records": [{"disabled": disabled, "content": x} for x in record_content], "ttl": ttl}
+                    record.pop('comments')
+                return True, {"diff": {"after": new_record, "before": record}}
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not update record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -360,7 +369,7 @@ def ensure(module, pdns_client):
             try:
                 if not module.check_mode:
                     pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
-                return True, None
+                return True, {"diff": {"before": record, "after": {}}}
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -374,7 +383,10 @@ def ensure(module, pdns_client):
                 if not module.check_mode:
                     pdns_client.create_record(server=server, zone=zone_name, name=name, rtype=rtype, content=record_content,
                                           set_ptr=set_ptr, ttl=ttl, disabled=disabled)
-                return True, pdns_client.get_record(server=server, rtype=rtype, zone=zone_name, name=name)
+                else:
+                    new_record = {"type": rtype, "name": name_print, "records": [{"disabled": disabled, "content": x} for x in record_content], "ttl": ttl}
+                    record.pop('comments')
+                return True, {"diff": {"before": record, "after": new_record}}
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -382,7 +394,7 @@ def ensure(module, pdns_client):
             try:
                 if not module.check_mode:
                     pdns_client.delete_record(server=server, zone=zone_name, name=name, rtype=rtype)
-                return True, None
+                return True, {"diff":{"after": {}, "before": record}}
             except PowerDNSError as e:
                 module.fail_json(
                         msg='Could not delete record {name}: HTTP {code}: {err}'.format(name=name, code=e.status_code,
@@ -407,9 +419,9 @@ def main():
                     pdns_host=dict(type='str', default='127.0.0.1'),
                     pdns_port=dict(type='int', default=8081),
                     pdns_prot=dict(type='str', default='http', choices=['http', 'https']),
-                    pdns_api_key=dict(type='str', required=False),
+                    pdns_api_key=dict(type='str', required=False, no_log=True),
                     pdns_api_username=dict(type='str', required=False),
-                    pdns_api_password=dict(type='str', required=False),
+                    pdns_api_password=dict(type='str', required=False, no_log=True),
                     strict_ssl_checking=dict(type='bool', default=True),
             ),
             supports_check_mode=True,
@@ -428,7 +440,10 @@ def main():
 
     try:
         changed, record = ensure(module, pdns_client)
-        module.exit_json(changed=changed, record=record)
+        if isinstance(record, dict) and "diff" in record:
+            module.exit_json(changed=changed, **record)
+        else:
+            module.exit_json(changed=changed, record=record)
     except Exception as e:
         module.fail_json(msg='Error: {0}'.format(str(e)))
 
