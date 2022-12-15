@@ -216,7 +216,10 @@ class PowerDNSClient:
         record_content = list()
         if content:
             for record in content:
-                entry = dict(content=record, disabled=disabled)
+                if rtype == "CNAME":
+                    entry = dict(content=self._make_canonical(record), disabled=disabled)
+                else:
+                    entry = dict(content=record, disabled=disabled)
                 if rtype in ['A', 'AAAA'] and set_ptr:
                     entry['set-ptr'] = True
 
@@ -310,8 +313,11 @@ def ensure(module, pdns_client):
     record = pdns_client.get_record(name=name, server=server, rtype=rtype, zone=zone_name)
     existing_content = [c.get('content') for c in record["records"]]
 
+
     # Sanitize user-provided input for certain record types
     if content:
+        if rtype == 'CNAME':
+            content = "{}.".format(content)
         if rtype == 'AAAA':
             # Lowercase IPv6 addresses to match case returned by the API.
             # Necessary for later comparisons.
