@@ -136,15 +136,13 @@ Ensure multiple MX records
     name: zone01.internal.example.com.
     zone: zone01.internal.example.com
     type: MX
-    exclusive: no
-    content: "{{ item }}"
+    content:
+      - 10 mx1.zone01.internal.example.com
+      - 10 mx2.zone01.internal.example.com
     pdns_host: powerdns.example.com
     pdns_port: 80
     pdns_api_key: topsecret
     pdns_prot: http
-  loop:
-    - 10 mx1.zone01.internal.example.com
-    - 10 mx2.zone01.internal.example.com
 ```
 
 Use HTTP Basic Auth instead of API Key
